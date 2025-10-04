@@ -2,9 +2,14 @@
 pragma solidity 0.8.30;
 /// @title Storage String
 /// @author Imanol Valenzuela Eguez
-contract ChangeCounter{
+contract FirstConstructor{
     string private storedInfo;
     uint public countChanges = 0;
+
+    constructor(){
+        storedInfo = "Hello World";
+    }
+
 /// Store "newInfo"
 /// Increase the counter which manage how many times storedInfo is updated
 /// @dev stores the string in the state variable 'storedInfo'
