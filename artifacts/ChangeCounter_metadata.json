@@ -1,0 +1,98 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [],
+				"name": "countChanges",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "getInfo",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "",
+						"type": "string"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "setInfo",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"author": "Imanol Valenzuela Eguez",
+			"kind": "dev",
+			"methods": {
+				"setInfo(string)": {
+					"details": "stores the string in the state variable 'storedInfo'",
+					"params": {
+						"newInfo": "the new string to store"
+					}
+				}
+			},
+			"title": "Storage String",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {
+				"setInfo(string)": {
+					"notice": "Store \"newInfo\" Increase the counter which manage how many times storedInfo is updated"
+				}
+			},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/Register.sol": "ChangeCounter"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/Register.sol": {
+			"keccak256": "0x61e9f2374512f3114ccf6437e67154fb4452bc5c1c254c92d3540f839861b1bf",
+			"license": "GPL-3.0",
+			"urls": [
+				"bzz-raw://f407e3a4ff8036675b98882b39da7b7c8e96768495fc5b64ea05c7b2b64525a7",
+				"dweb:/ipfs/QmQjjbTmUGzdkgu8hJSoiHPbhGgcYRgpj38ccxjNdQnHTk"
+			]
+		}
+	},
+	"version": 1
+}
