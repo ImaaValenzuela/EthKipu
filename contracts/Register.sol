@@ -2,21 +2,20 @@
 pragma solidity 0.8.30;
 /// @title Storage String
 /// @author Imanol Valenzuela Eguez
-contract FirstConstructor{
+contract Owner{
     string private storedInfo;
-    uint public countChanges = 0;
-
+    address public owner;
+/// The constructor set the deployer as the owner
     constructor(){
-        storedInfo = "Hello World";
+        owner = msg.sender;
     }
 
-/// Store "newInfo"
-/// Increase the counter which manage how many times storedInfo is updated
-/// @dev stores the string in the state variable 'storedInfo'
-/// @param newInfo the new string to store
+/// setInfo function checks if the transaction sender
+/// is the contract owner. If verified, it modifies the variable value
+/// If not, the function reverts or does nothing
     function setInfo(string memory newInfo) external{
+        require(msg.sender == owner, "Only the owner can update the info");
         storedInfo = newInfo;
-        countChanges++;
     }
 
 // Return the stored string
