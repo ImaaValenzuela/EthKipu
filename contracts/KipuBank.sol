@@ -60,9 +60,9 @@ contract KipuBank{
 
         vaults[msg.sender] -= amount;
         totalDeposits -= amount;
-        withdrawalCount++;
 
         _sendEther(msg.sender, amount);
+        withdrawalCount++;
 
         emit Withdrawal(msg.sender, amount, vaults[msg.sender]);
     }
