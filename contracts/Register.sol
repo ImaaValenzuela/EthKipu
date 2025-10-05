@@ -2,32 +2,41 @@
 pragma solidity 0.8.30;
 /// @title Storage String
 /// @author Imanol Valenzuela Eguez
-contract FirstArray{
-    string[] private storedInfos;
+contract WhiteList{
+    string private storedInfo;
+    address public owner;
+    mapping (address => bool) public whiteList;
 
-/// Adds new values to the array using push()
-/// index returns the position where the value was stored
-    function addInfo(string memory myInfo) external returns (uint index) {
-        storedInfos.push(myInfo);
-        index = storedInfos.length - 1; 
+    constructor(){
+        owner = msg.sender;
+        whiteList[msg.sender] = true;
+        storedInfo = "Hello world";
     }
 
-/// Updates the value at the specified index in the array
-/// Verifies the position is valid, othewise returns an error
-    function updateInfo(uint index, string memory newInfo) external{
-        require(index < storedInfos.length, "Invalid Index");
-        storedInfos[index] = newInfo;
+    modifier onlyOwner {
+        require (msg.sender == owner, "Only owner");
+        _;
     }
 
-/// Return the stored value at the index position of the array
-/// Check if the position is valid, othewise returns an error
-    function getOneInfo(uint index) external view returns (string memory){
-        require(index < storedInfos.length, "Invalid Index");
-        return storedInfos[index];
+    modifier onlyWhiteList{
+        require(whiteList[msg.sender] == true, "Only  whitelist");
+        _;
     }
 
-/// Returns all values stored in the array
-    function listAllInfo() external view returns (string[] memory){
-        return storedInfos;
+    function setInfo(string memory mnyInfo) external onlyWhiteList{
+        storedInfo = mnyInfo;
+    }
+
+    function addMember(address member) external onlyOwner{
+        whiteList[member] = true;
+    }
+
+    
+    function deleteMember(address member) external onlyOwner{
+        whiteList[member] = false;
+    }
+
+    function getInfo() external view returns (string memory){
+        return storedInfo;
     }
 }
