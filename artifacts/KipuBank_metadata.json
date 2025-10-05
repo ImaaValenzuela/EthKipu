@@ -400,7 +400,8 @@
 			}
 		],
 		"devdoc": {
-			"author": "Imanol Valenzuela Eguez",
+			"author": "ImaaValenzuela",
+			"details": "Implementa patrones de seguridad: checks-effects-interactions, errores personalizados,       circuit breaker y protección contra reentrancy  Características principales: - Depósitos con mínimo de 0.001 ETH - Retiros limitados por transacción - Límite global de capacidad del banco - Sistema de pausa de emergencia (circuit breaker) - Protección contra reentrancy - Control de acceso para funciones administrativas",
 			"errors": {
 				"BankCapExceeded()": [
 					{
@@ -569,7 +570,7 @@
 					"details": "Se incrementa cada vez que un usuario retira fondos exitosamente"
 				}
 			},
-			"title": "Storage String",
+			"title": "KipuBank",
 			"version": 1
 		},
 		"userdoc": {
@@ -697,6 +698,7 @@
 					"notice": "Contador global del número de retiros realizados"
 				}
 			},
+			"notice": "Sistema de bóveda bancaria descentralizada que permite depósitos y retiros controlados",
 			"version": 1
 		}
 	},
@@ -717,11 +719,11 @@
 	},
 	"sources": {
 		"contracts/KipuBank.sol": {
-			"keccak256": "0x0280de9e0465b015d826ffa63ffc6a36b7caec23d26ec489daaef15a0aab3786",
+			"keccak256": "0xf5fe9be2b57fb9e30ff2fa2e8a9891432bc1c4dde82d475d6d1825f456bf0f00",
 			"license": "GPL-3.0",
 			"urls": [
-				"bzz-raw://3d582b19ee0cce3513a4ae5d320b114623d59abee933bf04a7cc7fc5aedbeb05",
-				"dweb:/ipfs/QmWUfZizjFqfzthRi71FumgneG4vnTCk5dbgTdaEs2xZMk"
+				"bzz-raw://3905327b7e8c0ae8b32db755fd6f56b4a609a4b6d6a81b2c1dcd1bd731dafb62",
+				"dweb:/ipfs/Qmdn6AyogeFTFY9g7ry1tB6Jm7LTrWbe166YWTfzKfGkfw"
 			]
 		}
 	},

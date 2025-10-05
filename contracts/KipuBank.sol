@@ -1,7 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.30;
-/// @title Storage String
-/// @author Imanol Valenzuela Eguez
+/**
+ * @title KipuBank
+ * @author ImaaValenzuela
+ * @notice Sistema de bóveda bancaria descentralizada que permite depósitos y retiros controlados
+ * @dev Implementa patrones de seguridad: checks-effects-interactions, errores personalizados, 
+ *      circuit breaker y protección contra reentrancy
+ * 
+ * Características principales:
+ * - Depósitos con mínimo de 0.001 ETH
+ * - Retiros limitados por transacción
+ * - Límite global de capacidad del banco
+ * - Sistema de pausa de emergencia (circuit breaker)
+ * - Protección contra reentrancy
+ * - Control de acceso para funciones administrativas
+ */
 contract KipuBank{
     /* ========== VARIABLES INMUTABLES Y CONSTANTES ========== */
     /**
