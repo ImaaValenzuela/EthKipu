@@ -1,0 +1,291 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [],
+				"stateMutability": "nonpayable",
+				"type": "constructor"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": false,
+						"internalType": "address",
+						"name": "person",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "countChamges",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "oldInfo",
+						"type": "string"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "InfoChange",
+				"type": "event"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "enum AllTogether.Colors",
+						"name": "myColor",
+						"type": "uint8"
+					},
+					{
+						"internalType": "string",
+						"name": "myInfo",
+						"type": "string"
+					}
+				],
+				"name": "addInfo",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					}
+				],
+				"name": "getMyInfoAtIndex",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "string",
+								"name": "info",
+								"type": "string"
+							},
+							{
+								"internalType": "enum AllTogether.Colors",
+								"name": "color",
+								"type": "uint8"
+							},
+							{
+								"internalType": "uint256",
+								"name": "countChanges",
+								"type": "uint256"
+							}
+						],
+						"internalType": "struct AllTogether.InfoStruct",
+						"name": "",
+						"type": "tuple"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "account",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					}
+				],
+				"name": "getOneInfo",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "string",
+								"name": "info",
+								"type": "string"
+							},
+							{
+								"internalType": "enum AllTogether.Colors",
+								"name": "color",
+								"type": "uint8"
+							},
+							{
+								"internalType": "uint256",
+								"name": "countChanges",
+								"type": "uint256"
+							}
+						],
+						"internalType": "struct AllTogether.InfoStruct",
+						"name": "",
+						"type": "tuple"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "account",
+						"type": "address"
+					}
+				],
+				"name": "listAllInfo",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "string",
+								"name": "info",
+								"type": "string"
+							},
+							{
+								"internalType": "enum AllTogether.Colors",
+								"name": "color",
+								"type": "uint8"
+							},
+							{
+								"internalType": "uint256",
+								"name": "countChanges",
+								"type": "uint256"
+							}
+						],
+						"internalType": "struct AllTogether.InfoStruct[]",
+						"name": "",
+						"type": "tuple[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					},
+					{
+						"internalType": "enum AllTogether.Colors",
+						"name": "myColor",
+						"type": "uint8"
+					}
+				],
+				"name": "setColor",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "setInfo",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "storedInfos",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "info",
+						"type": "string"
+					},
+					{
+						"internalType": "enum AllTogether.Colors",
+						"name": "color",
+						"type": "uint8"
+					},
+					{
+						"internalType": "uint256",
+						"name": "countChanges",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"author": "Imanol Valenzuela Eguez",
+			"kind": "dev",
+			"methods": {},
+			"title": "Storage String",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/Register.sol": "AllTogether"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/Register.sol": {
+			"keccak256": "0x5ac9f5d1add20123410c9afe76052e4ff31296bcfa4a58643c129ad592cbe135",
+			"license": "GPL-3.0",
+			"urls": [
+				"bzz-raw://3017626c94935dbeb9048f222aa6068132f18b9964016488cbd5dea56aadcc3f",
+				"dweb:/ipfs/QmcYD6FAc2miWj3Jm5uF1YVT9L5FHz8BryDPitHNRcCZVW"
+			]
+		}
+	},
+	"version": 1
+}

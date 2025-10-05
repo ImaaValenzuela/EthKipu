@@ -2,41 +2,59 @@
 pragma solidity 0.8.30;
 /// @title Storage String
 /// @author Imanol Valenzuela Eguez
-contract WhiteList{
-    string private storedInfo;
-    address public owner;
-    mapping (address => bool) public whiteList;
+contract AllTogether{
+    enum Colors {Undefined, Blue, Red}
+
+    struct InfoStruct{
+        string info;
+        Colors color;
+        uint countChanges;
+    }
+
+    mapping (address => InfoStruct[]) public storedInfos;
 
     constructor(){
-        owner = msg.sender;
-        whiteList[msg.sender] = true;
-        storedInfo = "Hello world";
+        InfoStruct memory auxInfo = InfoStruct({
+            info: "Hello world",
+            color: Colors.Undefined,
+            countChanges: 0
+        });
+        storedInfos[msg.sender].push(auxInfo);
     }
 
-    modifier onlyOwner {
-        require (msg.sender == owner, "Only owner");
-        _;
+    event InfoChange(address person, uint countChamges, string oldInfo, string newInfo);
+
+    function addInfo(Colors myColor, string memory myInfo) public returns (uint index){
+        InfoStruct memory auxInfo = InfoStruct({
+            info: myInfo,
+            color: myColor,
+            countChanges: 0
+        });
+        storedInfos[msg.sender].push(auxInfo);
+        return storedInfos[msg.sender].length - 1;
     }
 
-    modifier onlyWhiteList{
-        require(whiteList[msg.sender] == true, "Only  whitelist");
-        _;
+    function setInfo(uint index, string memory newInfo) public {
+        storedInfos[msg.sender][index].countChanges++;
+        emit InfoChange(msg.sender, storedInfos[msg.sender][index].countChanges, storedInfos[msg.sender][index].info, newInfo);
+        storedInfos[msg.sender][index].info = newInfo;
     }
 
-    function setInfo(string memory mnyInfo) external onlyWhiteList{
-        storedInfo = mnyInfo;
+    function setColor(uint index, Colors myColor) public {
+        storedInfos[msg.sender][index].color = myColor;
+        storedInfos[msg.sender][index].countChanges++;
     }
 
-    function addMember(address member) external onlyOwner{
-        whiteList[member] = true;
+    function getOneInfo(address account, uint index) public view returns (InfoStruct memory) {
+        require(index < storedInfos[account].length, "Invalid index");
+        return storedInfos[account][index];
     }
 
-    
-    function deleteMember(address member) external onlyOwner{
-        whiteList[member] = false;
+    function getMyInfoAtIndex(uint index) external view returns (InfoStruct memory){
+        return getOneInfo(msg.sender, index);
     }
 
-    function getInfo() external view returns (string memory){
-        return storedInfo;
+    function listAllInfo(address account) external view returns (InfoStruct[] memory){
+        return storedInfos[account];
     }
 }
