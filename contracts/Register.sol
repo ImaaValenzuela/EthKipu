@@ -2,26 +2,32 @@
 pragma solidity 0.8.30;
 /// @title Storage String
 /// @author Imanol Valenzuela Eguez
-contract Owner{
-    string private storedInfo;
-    address public owner;
-/// The constructor set the deployer as the owner
-    constructor(){
-        owner = msg.sender;
+contract FirstArray{
+    string[] private storedInfos;
+
+/// Adds new values to the array using push()
+/// index returns the position where the value was stored
+    function addInfo(string memory myInfo) external returns (uint index) {
+        storedInfos.push(myInfo);
+        index = storedInfos.length - 1; 
     }
 
-/// setInfo function checks if the transaction sender
-/// is the contract owner. If verified, it modifies the variable value
-/// If not, the function reverts or does nothing
-    function setInfo(string memory newInfo) external{
-        require(msg.sender == owner, "Only the owner can update the info");
-        storedInfo = newInfo;
+/// Updates the value at the specified index in the array
+/// Verifies the position is valid, othewise returns an error
+    function updateInfo(uint index, string memory newInfo) external{
+        require(index < storedInfos.length, "Invalid Index");
+        storedInfos[index] = newInfo;
     }
 
-// Return the stored string
-// @dev retrieves the string of the state variable storedInfo
-// @return the stored string
-    function getInfo() external view returns (string memory){
-        return storedInfo;
+/// Return the stored value at the index position of the array
+/// Check if the position is valid, othewise returns an error
+    function getOneInfo(uint index) external view returns (string memory){
+        require(index < storedInfos.length, "Invalid Index");
+        return storedInfos[index];
+    }
+
+/// Returns all values stored in the array
+    function listAllInfo() external view returns (string[] memory){
+        return storedInfos;
     }
 }

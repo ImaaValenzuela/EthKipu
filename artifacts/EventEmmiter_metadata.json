@@ -1,0 +1,102 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "oldInfo",
+						"type": "string"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "InfoChange",
+				"type": "event"
+			},
+			{
+				"inputs": [],
+				"name": "getInfo",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "",
+						"type": "string"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "setInfo",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"author": "Imanol Valenzuela Eguez",
+			"kind": "dev",
+			"methods": {},
+			"title": "Storage String",
+			"version": 1
+		},
+		"userdoc": {
+			"events": {
+				"InfoChange(string,string)": {
+					"notice": "Defines an event to notify any changes in storedInfo"
+				}
+			},
+			"kind": "user",
+			"methods": {
+				"setInfo(string)": {
+					"notice": "Emit event when the value of storedInfo is abour to be changed"
+				}
+			},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/Register.sol": "EventEmmiter"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/Register.sol": {
+			"keccak256": "0xdc9e3dbff0eaaa8dc59bfad2ffcc7d0c8252b06d3c0951850cecfd9bc8cf5cbb",
+			"license": "GPL-3.0",
+			"urls": [
+				"bzz-raw://e8183a200c954ba63a6aeb656c23ca951ba8129c4e47a2908c2fb635eea52dd2",
+				"dweb:/ipfs/Qmbo719UfWpfJNGxEvGWunfAib18Vxeb36N6AXTnNVYFga"
+			]
+		}
+	},
+	"version": 1
+}

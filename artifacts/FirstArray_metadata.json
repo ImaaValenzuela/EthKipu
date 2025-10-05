@@ -1,0 +1,130 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "myInfo",
+						"type": "string"
+					}
+				],
+				"name": "addInfo",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					}
+				],
+				"name": "getOneInfo",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "",
+						"type": "string"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "listAllInfo",
+				"outputs": [
+					{
+						"internalType": "string[]",
+						"name": "",
+						"type": "string[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "index",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "newInfo",
+						"type": "string"
+					}
+				],
+				"name": "updateInfo",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"author": "Imanol Valenzuela Eguez",
+			"kind": "dev",
+			"methods": {},
+			"title": "Storage String",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {
+				"addInfo(string)": {
+					"notice": "Adds new values to the array using push() index returns the position where the value was stored"
+				},
+				"getOneInfo(uint256)": {
+					"notice": "Return the stored value at the index position of the array Check if the position is valid, othewise returns an error"
+				},
+				"listAllInfo()": {
+					"notice": "Returns all values stored in the array"
+				},
+				"updateInfo(uint256,string)": {
+					"notice": "Updates the value at the specified index in the array Verifies the position is valid, othewise returns an error"
+				}
+			},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/Register.sol": "FirstArray"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/Register.sol": {
+			"keccak256": "0x6cd5abd93d2cea67f6ea9288cfccf67eba8be710a1da1ee43b2da6a3176f9d5d",
+			"license": "GPL-3.0",
+			"urls": [
+				"bzz-raw://c92d257af48af0833ae21dedba8cd30cc9aae33aaff5e302ab5add94a33cb1a5",
+				"dweb:/ipfs/QmZaziCQD6mATGUMeYA8zJeW2Ee4A1F8AdmE6yUsxF7VDj"
+			]
+		}
+	},
+	"version": 1
+}
