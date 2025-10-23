@@ -1,427 +1,666 @@
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.30;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol"; 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
 /**
- * @title KipuBank
- * @author ImaaValenzuela
- * @notice Sistema de bóveda bancaria descentralizada que permite depósitos y retiros controlados
- * @dev Implementa patrones de seguridad: checks-effects-interactions, errores personalizados, 
- *      circuit breaker y protección contra reentrancy
+ * @title KipuBankV2
+ *  @author ImaaValenzuela
+ * @notice Sistema avanzado de bóveda bancaria descentralizada multi-token con oracle de precios
+ * @dev Implementa:
+ *      - Soporte multi-token (ETH y ERC20)
+ *      - Control de acceso basado en roles (OpenZeppelin AccessControl)
+ *      - Oracle de Chainlink para conversión ETH/USD
+ *      - Contabilidad interna normalizada a decimales USDC (6 decimales)
+ *      - Pausabilidad con OpenZeppelin Pausable
+ *      - Protección contra reentrancy con OpenZeppelin ReentrancyGuard
+ *      - Límite del banco en USD
  * 
- * Características principales:
- * - Depósitos con mínimo de 0.001 ETH
- * - Retiros limitados por transacción
- * - Límite global de capacidad del banco
- * - Sistema de pausa de emergencia (circuit breaker)
- * - Protección contra reentrancy
- * - Control de acceso para funciones administrativas
+ * Arquitectura:
+ * - address(0) representa depósitos en ETH nativo
+ * - Todos los montos se normalizan a 6 decimales (estándar USDC) internamente
+ * - Los límites se manejan en USD usando Chainlink Price Feeds
  */
-contract KipuBank{
-    /* ========== VARIABLES INMUTABLES Y CONSTANTES ========== */
-    /**
-     * @notice Límite máximo de retiro por transacción
-     * @dev Establecido en el constructor como immutable para optimizar gas
-     *      Valor recomendado: 0.1 ETH (100000000000000000 wei)
-     */
-    uint256 public immutable WITHDRAWAL_LIMIT;
+contract KipuBankV2 is AccessControl, ReentrancyGuard, Pausable {
+    using SafeERC20 for IERC20;
 
-    /**
-     * @notice Depósito mínimo requerido para usar el banco
-     * @dev Definido como constante: 0.001 ETH (1000000000000000 wei)
-     */
-    uint256 public constant MINIMUM_DEPOSIT =  0.001 ether;
+    /* ========== ROLES ========== */
 
-    /**
-     * @notice Dirección del propietario del contrato
-     * @dev Tiene permisos administrativos como pausar el contrato
-     */
-    address public immutable owner;
+    /// @notice Rol de administrador con permisos elevados
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    
+    /// @notice Rol de operador que puede pausar/despausar en emergencias
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    /* ========== VARIABLES DE ALMACENAMIENTO ========== */
-    /**
-     * @notice Límite total de depósitos que el banco puede aceptar
-     * @dev Se establece en el constructor. Una vez alcanzado, no se permiten más depósitos
-     *      Valor recomendado: 100 ETH
-     */
-    uint256 public bankCap;
+    /* ========== CONSTANTES ========== */
 
-    /**
-     * @notice Total acumulado de fondos depositados actualmente en el banco
-     * @dev Se actualiza en cada depósito (suma) y retiro (resta)
-     */
-    uint256 public totalDeposits;
+    /// @notice Dirección especial que representa ETH nativo
+    address public constant NATIVE_TOKEN = address(0);
+    
+    /// @notice Decimales de referencia para contabilidad interna (USDC standard)
+    uint8 public constant ACCOUNTING_DECIMALS = 6;
+    
+    /// @notice Depósito mínimo en USD (0.10 USD con 6 decimales)
+    uint256 public constant MINIMUM_DEPOSIT_USD = 100000; // 0.1 USD
+    
+    /// @notice Decimales del price feed de Chainlink (generalmente 8)
+    uint8 public constant PRICE_FEED_DECIMALS = 8;
 
-    /**
-     * @notice Contador global del número de depósitos realizados
-     * @dev Se incrementa cada vez que un usuario deposita, independientemente del monto
-     */
+    /* ========== VARIABLES INMUTABLES ========== */
+
+    /// @notice Oracle de Chainlink para precio ETH/USD
+    AggregatorV3Interface public immutable ethUsdPriceFeed;
+    
+    /// @notice Límite máximo del banco en USD (con ACCOUNTING_DECIMALS)
+    uint256 public immutable bankCapUsd;
+    
+    /// @notice Límite de retiro por transacción en USD (con ACCOUNTING_DECIMALS)
+    uint256 public immutable withdrawalLimitUsd;
+
+    /* ========== VARIABLES DE ESTADO ========== */
+
+    /// @notice Total de depósitos en el banco expresado en USD normalizado
+    uint256 public totalDepositsUsd;
+    
+    /// @notice Contador global de operaciones de depósito
     uint256 public depositCount;
-
-    /**
-     * @notice Contador global del número de retiros realizados
-     * @dev Se incrementa cada vez que un usuario retira fondos exitosamente
-     */
+    
+    /// @notice Contador global de operaciones de retiro
     uint256 public withdrawalCount;
+    
+    /// @notice Lista de tokens soportados por el banco
+    address[] public supportedTokens;
 
-    /**
-     * @notice Estado del circuit breaker para pausar el contrato en emergencias
-     * @dev true = contrato pausado, false = contrato operativo
-     */
-     bool public paused;
+    /* ========== MAPPINGS ========== */
 
-   /* ========== MAPPINGS ========== */
-    /**
-     * @notice Mapeo de direcciones de usuarios a sus balances en la bóveda
-     * @dev Cada dirección tiene su propia bóveda individual
-     *      address => balance en wei
-     */
-    mapping(address => uint256) public vaults;
+    /// @notice Balance de cada usuario por token: user => token => amount (en decimales nativos del token)
+    mapping(address => mapping(address => uint256)) public vaults;
+    
+    /// @notice Verifica si un token está soportado
+    mapping(address => bool) public isTokenSupported;
+    
+    /// @notice Decimales de cada token soportado (0 para ETH = 18 decimales)
+    mapping(address => uint8) public tokenDecimals;
+    
+    /// @notice Oracle de precio para cada token ERC20: token => price feed
+    /// @dev ETH usa ethUsdPriceFeed directamente
+    mapping(address => AggregatorV3Interface) public tokenPriceFeeds;
+
+    /* ========== STRUCTS ========== */
+
+    /// @notice Información de un token soportado
+    struct TokenInfo {
+        address tokenAddress;
+        uint8 decimals;
+        bool isSupported;
+        address priceFeed;
+    }
 
     /* ========== EVENTOS ========== */
-    /**
-     * @notice Se emite cuando un usuario deposita fondos exitosamente
-     * @param user Dirección del usuario que realizó el depósito
-     * @param amount Cantidad depositada en wei
-     * @param newBalance Nuevo balance total del usuario en su bóveda
-     */
-    event Deposit(address indexed user, uint256 amount, uint256 newBalance);
 
     /**
-     * @notice Se emite cuando un usuario retira fondos exitosamente
-     * @param user Dirección del usuario que realizó el retiro
-     * @param amount Cantidad retirada en wei
-     * @param newBalance Nuevo balance restante del usuario en su bóveda
+     * @notice Emitido cuando un usuario deposita fondos
+     * @param user Dirección del usuario
+     * @param token Dirección del token (address(0) para ETH)
+     * @param amount Cantidad depositada en decimales nativos del token
+     * @param amountUsd Valor del depósito en USD normalizado
      */
-    event Withdrawal(address indexed user, uint256 amount, uint256 newBalance);
+    event Deposit(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 amountUsd
+    );
 
     /**
-     * @notice Se emite cuando el contrato es pausado
-     * @param by Dirección que pausó el contrato
+     * @notice Emitido cuando un usuario retira fondos
+     * @param user Dirección del usuario
+     * @param token Dirección del token (address(0) para ETH)
+     * @param amount Cantidad retirada en decimales nativos del token
+     * @param amountUsd Valor del retiro en USD normalizado
      */
-    event Paused(address indexed by);
-    
+    event Withdrawal(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 amountUsd
+    );
+
     /**
-     * @notice Se emite cuando el contrato es despausado
-     * @param by Dirección que despausó el contrato
+     * @notice Emitido cuando se agrega un nuevo token soportado
+     * @param token Dirección del token
+     * @param decimals Decimales del token
+     * @param priceFeed Dirección del oracle de precio
      */
-    event Unpaused(address indexed by);
+    event TokenAdded(
+        address indexed token,
+        uint8 decimals,
+        address priceFeed
+    );
+
+    /**
+     * @notice Emitido cuando se remueve un token
+     * @param token Dirección del token removido
+     */
+    event TokenRemoved(address indexed token);
 
     /* ========== ERRORES PERSONALIZADOS ========== */
-    /**
-     * @notice Error cuando el monto depositado es menor al mínimo permitido
-     * @dev Se lanza si msg.value < MINIMUM_DEPOSIT
-     */
+
+    error TokenNotSupported();
+    error TokenAlreadySupported();
+    error InvalidAmount();
+    error InvalidTokenAddress();
+    error InvalidPriceFeed();
     error DepositTooSmall();
-    
-    /**
-     * @notice Error cuando el depósito excedería el límite total del banco
-     * @dev Se lanza si totalDeposits + msg.value > bankCap
-     */
     error BankCapExceeded();
-    
-    /**
-     * @notice Error cuando el usuario no tiene fondos suficientes para retirar
-     * @dev Se lanza si vaults[msg.sender] < amount solicitado
-     */
     error InsufficientBalance();
-    
-    /**
-     * @notice Error cuando el retiro solicitado excede el límite por transacción
-     * @dev Se lanza si amount > WITHDRAWAL_LIMIT
-     */
     error WithdrawalLimitExceeded();
-    
-    /**
-     * @notice Error cuando la transferencia de ETH falla
-     * @dev Se lanza si call{value}() retorna false
-     */
     error TransferFailed();
-    
-    /**
-     * @notice Error cuando se intenta retirar cero o un monto inválido
-     * @dev Se lanza si amount == 0
-     */
-    error InvalidWithdrawalAmount();
-    
-    /**
-     * @notice Error cuando el contrato está pausado
-     * @dev Se lanza si se intenta operar mientras paused == true
-     */
-    error ContractPaused();
-    
-    /**
-     * @notice Error cuando alguien que no es el owner intenta ejecutar funciones administrativas
-     * @dev Se lanza si msg.sender != owner
-     */
-    error OnlyOwner();
-    
-    /**
-     * @notice Error cuando se intenta depositar 0 ETH
-     * @dev Se lanza si msg.value == 0
-     */
-    error ZeroDeposit();
+    error StalePrice();
+    error InvalidPrice();
 
     /* ========== CONSTRUCTOR ========== */
-    /**
-     * @notice Inicializa el contrato KipuBank con parámetros configurables
-     * @param _bankCap Límite total de depósitos que el banco puede aceptar (en wei)
-     * @param _withdrawalLimit Límite máximo de retiro por transacción (en wei)
-     * @dev Ejemplo de despliegue:
-     *      - _bankCap: 100 ether (100000000000000000000)
-     *      - _withdrawalLimit: 0.1 ether (100000000000000000)
-     *      El deployer se convierte automáticamente en el owner
-     */
-    constructor(uint256 _bankCap, uint256 _withdrawalLimit){
-        bankCap = _bankCap;
-        WITHDRAWAL_LIMIT = _withdrawalLimit;
-        owner = msg.sender;
-        paused = false;
-    }
-
-    /* ========== MODIFICADORES ========== */
 
     /**
-     * @notice Verifica que el monto sea válido (mayor a cero)
-     * @param amount Monto a validar en wei
-     * @dev Previene operaciones con montos cero que no tendrían sentido
+     * @notice Inicializa KipuBankV2
+     * @param _ethUsdPriceFeed Dirección del oracle Chainlink ETH/USD
+     * @param _bankCapUsd Límite del banco en USD (con 6 decimales)
+     * @param _withdrawalLimitUsd Límite de retiro en USD (con 6 decimales)
+     * @dev El deployer recibe DEFAULT_ADMIN_ROLE, ADMIN_ROLE y OPERATOR_ROLE
+     * 
+     * Ejemplo Sepolia:
+     * _ethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306
+     * _bankCapUsd: 100000000000 (100,000 USD)
+     * _withdrawalLimitUsd: 1000000000 (1,000 USD)
      */
-    modifier validAmount(uint256 amount){
-        if (amount == 0) revert InvalidWithdrawalAmount();
-        _;
+    constructor(
+        address _ethUsdPriceFeed,
+        uint256 _bankCapUsd,
+        uint256 _withdrawalLimitUsd
+    ) {
+        if (_ethUsdPriceFeed == address(0)) revert InvalidPriceFeed();
+        if (_bankCapUsd == 0) revert InvalidAmount();
+        if (_withdrawalLimitUsd == 0) revert InvalidAmount();
+        if (_withdrawalLimitUsd > _bankCapUsd) revert WithdrawalLimitExceeded();
+
+        ethUsdPriceFeed = AggregatorV3Interface(_ethUsdPriceFeed);
+        bankCapUsd = _bankCapUsd;
+        withdrawalLimitUsd = _withdrawalLimitUsd;
+
+        // Configurar roles
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(OPERATOR_ROLE, msg.sender);
+
+        // Agregar ETH como token soportado por defecto
+        _addToken(NATIVE_TOKEN, 18, _ethUsdPriceFeed);
+    }
+
+    /* ========== FUNCIONES ADMINISTRATIVAS ========== */
+
+    /**
+     * @notice Agrega un nuevo token ERC20 soportado
+     * @param token Dirección del token ERC20
+     * @param priceFeed Dirección del oracle Chainlink para este token
+     * @dev Solo ADMIN_ROLE puede ejecutar
+     */
+    function addToken(
+        address token,
+        address priceFeed
+    ) external onlyRole(ADMIN_ROLE) {
+        if (token == address(0)) revert InvalidTokenAddress();
+        if (token == NATIVE_TOKEN) revert TokenAlreadySupported();
+        if (priceFeed == address(0)) revert InvalidPriceFeed();
+        if (isTokenSupported[token]) revert TokenAlreadySupported();
+
+        // Obtener decimales del token ERC20
+        uint8 decimals = IERC20Metadata(token).decimals();
+        
+        _addToken(token, decimals, priceFeed);
     }
 
     /**
-     * @notice Verifica que el contrato no esté pausado
-     * @dev Implementa el patrón circuit breaker para emergencias
+     * @notice Remueve un token del sistema
+     * @param token Dirección del token a remover
+     * @dev No se puede remover ETH nativo. Solo ADMIN_ROLE puede ejecutar
      */
-    modifier whenNotPaused() {
-        if (paused) revert ContractPaused();
-        _;
+    function removeToken(address token) external onlyRole(ADMIN_ROLE) {
+        if (token == NATIVE_TOKEN) revert InvalidTokenAddress();
+        if (!isTokenSupported[token]) revert TokenNotSupported();
+
+        isTokenSupported[token] = false;
+        delete tokenDecimals[token];
+        delete tokenPriceFeeds[token];
+
+        // Remover de la lista
+        for (uint256 i = 0; i < supportedTokens.length; i++) {
+            if (supportedTokens[i] == token) {
+                supportedTokens[i] = supportedTokens[supportedTokens.length - 1];
+                supportedTokens.pop();
+                break;
+            }
+        }
+
+        emit TokenRemoved(token);
     }
-    
+
     /**
-     * @notice Verifica que el caller sea el owner del contrato
-     * @dev Control de acceso para funciones administrativas
+     * @notice Pausa todas las operaciones del contrato
+     * @dev Solo OPERATOR_ROLE puede ejecutar
      */
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert OnlyOwner();
-        _;
+    function pause() external onlyRole(OPERATOR_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @notice Despausa el contrato
+     * @dev Solo OPERATOR_ROLE puede ejecutar
+     */
+    function unpause() external onlyRole(OPERATOR_ROLE) {
+        _unpause();
     }
 
     /* ========== FUNCIONES EXTERNAS PAYABLE ========== */
+
     /**
-     * @notice Permite a los usuarios depositar ETH en su bóveda personal
-     * @dev Implementa el patrón checks-effects-interactions:
-     *      1. CHECKS: Valida que no esté pausado, monto mínimo y límite del banco
-     *      2. EFFECTS: Actualiza estado (vaults, totalDeposits, depositCount)
-     *      3. INTERACTIONS: Emite evento
-     * 
-     * Requisitos:
-     * - El contrato no debe estar pausado
-     * - msg.value debe ser > 0
-     * - msg.value debe ser >= MINIMUM_DEPOSIT (0.001 ETH)
-     * - El depósito no debe hacer que totalDeposits exceda bankCap
-     * 
-     * Emite un evento {Deposit}
-     * 
-     * Ejemplo de uso:
-     * kipuBank.deposit{value: 0.5 ether}();
+     * @notice Deposita ETH nativo en la bóveda
+     * @dev Función payable que acepta ETH
      */
-    function deposit() external payable {
-        // CHECKS: Validaciones de negocio
-        if (msg.value < MINIMUM_DEPOSIT) revert DepositTooSmall();
-        if (totalDeposits + msg.value > bankCap) revert BankCapExceeded();
-
-        // EFFECTS: Actualización de estado (previene reentrancy)
-        vaults[msg.sender] += msg.value;
-        totalDeposits += msg.value;
-        depositCount++;
-
-        // INTERACTIONS: Emisión de evento (última acción)
-        emit Deposit(msg.sender, msg.value, vaults[msg.sender]);
+    function depositNative() external payable whenNotPaused nonReentrant {
+        if (msg.value == 0) revert InvalidAmount();
+        _deposit(NATIVE_TOKEN, msg.value);
     }
 
     /* ========== FUNCIONES EXTERNAS ========== */
-    
+
     /**
-     * @notice Permite a los usuarios retirar ETH de su bóveda personal
-     * @param amount Cantidad a retirar en wei
-     * @dev Implementa checks-effects-interactions y protección contra reentrancy:
-     *      1. CHECKS: Valida que no esté pausado, monto, balance y límite de retiro
-     *      2. EFFECTS: Actualiza estado antes de transferir
-     *      3. INTERACTIONS: Transfiere ETH usando call (seguro)
-     * 
-     * Requisitos:
-     * - El contrato no debe estar pausado
-     * - amount debe ser > 0 (validado por modificador)
-     * - Usuario debe tener balance suficiente en su bóveda
-     * - amount no debe exceder WITHDRAWAL_LIMIT
-     * 
-     * Emite un evento {Withdrawal}
-     * 
-     * @custom:security Actualiza el estado antes de la transferencia para prevenir reentrancy
-     * 
-     * Ejemplo de uso:
-     * kipuBank.withdraw(0.05 ether);
+     * @notice Deposita tokens ERC20 en la bóveda
+     * @param token Dirección del token ERC20
+     * @param amount Cantidad a depositar en decimales nativos del token
+     * @dev Requiere aprobación previa del token
      */
-    function withdraw(uint256 amount) external validAmount(amount){
-        // CHECKS: Validaciones de seguridad
-        if (vaults[msg.sender] < amount) revert InsufficientBalance();
-        if(amount > WITHDRAWAL_LIMIT) revert WithdrawalLimitExceeded();
+    function deposit(
+        address token,
+        uint256 amount
+    ) external whenNotPaused nonReentrant {
+        if (token == NATIVE_TOKEN) revert InvalidTokenAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (!isTokenSupported[token]) revert TokenNotSupported();
 
-        // EFFECTS: Actualización de estado antes de transferencia (anti-reentrancy)
-        vaults[msg.sender] -= amount;
-        totalDeposits -= amount;
+        // Transferir tokens del usuario al contrato
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         
-        // INTERACTIONS: Transferencia externa al final
-        _sendEther(msg.sender, amount);
-        withdrawalCount++;
-
-        // Emisión de evento después de transferencia exitosa
-        emit Withdrawal(msg.sender, amount, vaults[msg.sender]);
+        _deposit(token, amount);
     }
 
     /**
-     * @notice Permite al usuario retirar todo su balance disponible
-     * @dev Alternativa conveniente a withdraw(amount) que previene errores de cálculo
-     *      Respeta el límite de retiro por transacción
-     * 
-     * Requisitos:
-     * - El contrato no debe estar pausado
-     * - El usuario debe tener balance > 0
-     * 
-     * Emite un evento {Withdrawal}
-     * 
-     * Nota: Si el balance es mayor al WITHDRAWAL_LIMIT, solo retira hasta el límite
+     * @notice Retira tokens de la bóveda
+     * @param token Dirección del token (address(0) para ETH)
+     * @param amount Cantidad a retirar en decimales nativos del token
      */
-    function withdrawAll() external whenNotPaused {
-        uint256 userBalance = vaults[msg.sender];
+    function withdraw(
+        address token,
+        uint256 amount
+    ) external whenNotPaused nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (!isTokenSupported[token]) revert TokenNotSupported();
+        if (vaults[msg.sender][token] < amount) revert InsufficientBalance();
+
+        // Convertir a USD para verificar límite
+        uint256 amountUsd = _convertToUsd(token, amount);
+        if (amountUsd > withdrawalLimitUsd) revert WithdrawalLimitExceeded();
+
+        // Actualizar estado
+        vaults[msg.sender][token] -= amount;
+        totalDepositsUsd -= amountUsd;
+        withdrawalCount++;
+
+        // Transferir fondos
+        if (token == NATIVE_TOKEN) {
+            _sendNative(msg.sender, amount);
+        } else {
+            IERC20(token).safeTransfer(msg.sender, amount);
+        }
+
+        emit Withdrawal(msg.sender, token, amount, amountUsd);
+    }
+
+    /**
+     * @notice Retira todo el balance disponible de un token
+     * @param token Dirección del token (address(0) para ETH)
+     * @dev Respeta el límite de retiro en USD
+     */
+    function withdrawAll(address token) external whenNotPaused nonReentrant {
+        if (!isTokenSupported[token]) revert TokenNotSupported();
         
-        // CHECKS: Validar que hay fondos para retirar
+        uint256 userBalance = vaults[msg.sender][token];
         if (userBalance == 0) revert InsufficientBalance();
+
+        // Convertir balance a USD
+        uint256 balanceUsd = _convertToUsd(token, userBalance);
         
-        // Determinar el monto a retirar (el menor entre balance y límite)
-        uint256 amountToWithdraw = userBalance > WITHDRAWAL_LIMIT 
-            ? WITHDRAWAL_LIMIT 
-            : userBalance;
+        // Determinar cuánto puede retirar
+        uint256 amountToWithdraw;
+        uint256 amountUsd;
         
-        // EFFECTS: Actualización de estado antes de transferencia
-        vaults[msg.sender] -= amountToWithdraw;
-        totalDeposits -= amountToWithdraw;
+        if (balanceUsd <= withdrawalLimitUsd) {
+            // Puede retirar todo
+            amountToWithdraw = userBalance;
+            amountUsd = balanceUsd;
+        } else {
+            // Solo puede retirar hasta el límite
+            amountToWithdraw = _convertFromUsd(token, withdrawalLimitUsd);
+            amountUsd = withdrawalLimitUsd;
+        }
+
+        // Actualizar estado
+        vaults[msg.sender][token] -= amountToWithdraw;
+        totalDepositsUsd -= amountUsd;
         withdrawalCount++;
-        
-        // INTERACTIONS: Transferencia externa
-        _sendEther(msg.sender, amountToWithdraw);
-        
-        emit Withdrawal(msg.sender, amountToWithdraw, vaults[msg.sender]);
+
+        // Transferir fondos
+        if (token == NATIVE_TOKEN) {
+            _sendNative(msg.sender, amountToWithdraw);
+        } else {
+            IERC20(token).safeTransfer(msg.sender, amountToWithdraw);
+        }
+
+        emit Withdrawal(msg.sender, token, amountToWithdraw, amountUsd);
     }
-    
+
+    /* ========== FUNCIONES DE VISTA ========== */
+
     /**
-     * @notice Pausa el contrato en caso de emergencia (circuit breaker)
-     * @dev Solo puede ser ejecutado por el owner
-     *      Previene depósitos y retiros mientras está pausado
-     * 
-     * Emite un evento {Paused}
+     * @notice Obtiene el balance de un usuario en un token específico
+     * @param user Dirección del usuario
+     * @param token Dirección del token
+     * @return Balance en decimales nativos del token
      */
-    function pause() external onlyOwner {
-        paused = true;
-        emit Paused(msg.sender);
-    }
-    
-    /**
-     * @notice Despausa el contrato y reanuda operaciones normales
-     * @dev Solo puede ser ejecutado por el owner
-     * 
-     * Emite un evento {Unpaused}
-     */
-    function unpause() external onlyOwner {
-        paused = false;
-        emit Unpaused(msg.sender);
-    }
-    
-    /* ========== FUNCIONES DE VISTA (VIEW) ========== */
-    
-    /**
-     * @notice Obtiene el balance de una dirección específica en su bóveda
-     * @param user Dirección del usuario a consultar
-     * @return Balance del usuario en wei
-     * @dev Función pública de solo lectura, no modifica el estado
-     * 
-     * Ejemplo de uso:
-     * uint256 myBalance = kipuBank.getBalance(msg.sender);
-     */
-    function getBalance(address user) external view returns (uint256){
-        return vaults[user];
+    function getBalance(
+        address user,
+        address token
+    ) external view returns (uint256) {
+        return vaults[user][token];
     }
 
     /**
-     * @notice Obtiene el balance del caller (quien llama la función)
-     * @return Balance del msg.sender en wei
-     * @dev Función conveniente para que usuarios consulten su propio balance
+     * @notice Obtiene el balance de un usuario en USD
+     * @param user Dirección del usuario
+     * @param token Dirección del token
+     * @return Balance en USD con ACCOUNTING_DECIMALS
      */
-    function getMyBalance() external view returns (uint256) {
-        return vaults[msg.sender];
+    function getBalanceInUsd(
+        address user,
+        address token
+    ) external view returns (uint256) {
+        uint256 balance = vaults[user][token];
+        return _convertToUsd(token, balance);
     }
-    
+
+    /**
+     * @notice Obtiene todos los balances de un usuario
+     * @param user Dirección del usuario
+     * @return tokens Array de direcciones de tokens
+     * @return balances Array de balances correspondientes
+     * @return balancesUsd Array de balances en USD
+     */
+    function getAllBalances(address user) external view returns (
+        address[] memory tokens,
+        uint256[] memory balances,
+        uint256[] memory balancesUsd
+    ) {
+        uint256 length = supportedTokens.length;
+        tokens = new address[](length);
+        balances = new uint256[](length);
+        balancesUsd = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = supportedTokens[i];
+            uint256 balance = vaults[user][token];
+            
+            tokens[i] = token;
+            balances[i] = balance;
+            balancesUsd[i] = _convertToUsd(token, balance);
+        }
+
+        return (tokens, balances, balancesUsd);
+    }
+
     /**
      * @notice Obtiene estadísticas generales del banco
-     * @return _totalDeposits Total de fondos depositados actualmente en el banco
-     * @return _depositCount Número acumulado de operaciones de depósito
-     * @return _withdrawalCount Número acumulado de operaciones de retiro
-     * @return _availableCapacity Capacidad restante del banco (bankCap - totalDeposits)
-     * @dev Útil para dashboards y monitoreo del estado del banco
-     * 
-     * Ejemplo de uso:
-     * (uint256 total, uint256 deposits, uint256 withdrawals, uint256 available) = kipuBank.getBankStats();
+     * @return _totalDepositsUsd Total depositado en USD
+     * @return _depositCount Número de depósitos
+     * @return _withdrawalCount Número de retiros
+     * @return _availableCapacityUsd Capacidad restante en USD
      */
     function getBankStats() external view returns (
-        uint256 _totalDeposits,
+        uint256 _totalDepositsUsd,
         uint256 _depositCount,
         uint256 _withdrawalCount,
-        uint256 _availableCapacity
+        uint256 _availableCapacityUsd
     ) {
         return (
-            totalDeposits,
+            totalDepositsUsd,
             depositCount,
             withdrawalCount,
-            bankCap - totalDeposits
+            bankCapUsd - totalDepositsUsd
         );
     }
-    
+
     /**
-     * @notice Verifica si el contrato está actualmente pausado
-     * @return true si está pausado, false si está operativo
+     * @notice Obtiene la lista de tokens soportados
+     * @return Array de direcciones de tokens soportados
      */
-    function isPaused() external view returns (bool) {
-        return paused;
+    function getSupportedTokens() external view returns (address[] memory) {
+        return supportedTokens;
     }
-    
+
     /**
-     * @notice Calcula cuánto puede retirar un usuario en la próxima transacción
-     * @param user Dirección del usuario a consultar
-     * @return Monto máximo que puede retirar (el menor entre su balance y WITHDRAWAL_LIMIT)
+     * @notice Obtiene información completa de un token
+     * @param token Dirección del token
+     * @return info Estructura con información del token
      */
-    function getMaxWithdrawal(address user) external view returns (uint256) {
-        uint256 userBalance = vaults[user];
-        return userBalance > WITHDRAWAL_LIMIT ? WITHDRAWAL_LIMIT : userBalance;
+    function getTokenInfo(address token) external view returns (TokenInfo memory info) {
+        return TokenInfo({
+            tokenAddress: token,
+            decimals: tokenDecimals[token],
+            isSupported: isTokenSupported[token],
+            priceFeed: address(tokenPriceFeeds[token])
+        });
     }
-    
-    /* ========== FUNCIONES PRIVADAS ========== */
-    
+
     /**
-     * @notice Envía ETH de forma segura usando call
-     * @param to Dirección destinataria
-     * @param amount Cantidad a enviar en wei
-     * @dev Usa call en lugar de transfer/send por las siguientes razones:
-     *      - transfer y send tienen un límite fijo de 2300 gas
-     *      - call reenvía todo el gas disponible
-     *      - call es más compatible con contratos inteligentes como destinatarios
-     * 
-     * @custom:security Revierte si la transferencia falla
-     * @custom:security Solo llamada internamente después de actualizar el estado
-     * @custom:security Visibilidad private asegura que no puede ser llamada externamente
+     * @notice Obtiene el precio actual de un token en USD
+     * @param token Dirección del token
+     * @return Precio en USD con PRICE_FEED_DECIMALS
      */
-    function _sendEther(address to, uint256 amount) private {
+    function getTokenPrice(address token) external view returns (uint256) {
+        return _getPrice(token);
+    }
+
+    /**
+     * @notice Convierte una cantidad de token a USD
+     * @param token Dirección del token
+     * @param amount Cantidad en decimales nativos del token
+     * @return Valor en USD con ACCOUNTING_DECIMALS
+     */
+    function convertToUsd(
+        address token,
+        uint256 amount
+    ) external view returns (uint256) {
+        return _convertToUsd(token, amount);
+    }
+
+    /**
+     * @notice Convierte un monto en USD a cantidad de token
+     * @param token Dirección del token
+     * @param amountUsd Monto en USD con ACCOUNTING_DECIMALS
+     * @return Cantidad en decimales nativos del token
+     */
+    function convertFromUsd(
+        address token,
+        uint256 amountUsd
+    ) external view returns (uint256) {
+        return _convertFromUsd(token, amountUsd);
+    }
+
+    /**
+     * @notice Calcula el máximo que un usuario puede retirar
+     * @param user Dirección del usuario
+     * @param token Dirección del token
+     * @return Cantidad máxima en decimales nativos del token
+     */
+    function getMaxWithdrawal(
+        address user,
+        address token
+    ) external view returns (uint256) {
+        uint256 userBalance = vaults[user][token];
+        uint256 balanceUsd = _convertToUsd(token, userBalance);
+        
+        if (balanceUsd <= withdrawalLimitUsd) {
+            return userBalance;
+        } else {
+            return _convertFromUsd(token, withdrawalLimitUsd);
+        }
+    }
+
+    /* ========== FUNCIONES INTERNAS ========== */
+
+    /**
+     * @notice Agrega un token al sistema
+     * @param token Dirección del token
+     * @param decimals Decimales del token
+     * @param priceFeed Dirección del oracle
+     */
+    function _addToken(
+        address token,
+        uint8 decimals,
+        address priceFeed
+    ) internal {
+        isTokenSupported[token] = true;
+        tokenDecimals[token] = decimals;
+        tokenPriceFeeds[token] = AggregatorV3Interface(priceFeed);
+        supportedTokens.push(token);
+
+        emit TokenAdded(token, decimals, priceFeed);
+    }
+
+    /**
+     * @notice Lógica interna de depósito
+     * @param token Dirección del token
+     * @param amount Cantidad en decimales nativos del token
+     */
+    function _deposit(address token, uint256 amount) internal {
+        // Convertir a USD
+        uint256 amountUsd = _convertToUsd(token, amount);
+        
+        // Validar monto mínimo
+        if (amountUsd < MINIMUM_DEPOSIT_USD) revert DepositTooSmall();
+        
+        // Validar capacidad del banco
+        if (totalDepositsUsd + amountUsd > bankCapUsd) revert BankCapExceeded();
+
+        // Actualizar estado
+        vaults[msg.sender][token] += amount;
+        totalDepositsUsd += amountUsd;
+        depositCount++;
+
+        emit Deposit(msg.sender, token, amount, amountUsd);
+    }
+
+    /**
+     * @notice Obtiene el precio de un token desde Chainlink
+     * @param token Dirección del token
+     * @return Precio con PRICE_FEED_DECIMALS
+     */
+    function _getPrice(address token) internal view returns (uint256) {
+        AggregatorV3Interface priceFeed = token == NATIVE_TOKEN 
+            ? ethUsdPriceFeed 
+            : tokenPriceFeeds[token];
+
+        (, int256 price, , uint256 updatedAt, ) = priceFeed.latestRoundData();
+        
+        if (price <= 0) revert InvalidPrice();
+        if (updatedAt == 0) revert StalePrice();
+        // Chainlink heartbeat: 3600s para ETH/USD en Sepolia
+        if (block.timestamp - updatedAt > 3600) revert StalePrice();
+
+        return uint256(price);
+    }
+
+    /**
+     * @notice Convierte cantidad de token a USD
+     * @param token Dirección del token
+     * @param amount Cantidad en decimales nativos
+     * @return Valor en USD con ACCOUNTING_DECIMALS
+     */
+    function _convertToUsd(
+        address token,
+        uint256 amount
+    ) internal view returns (uint256) {
+        if (amount == 0) return 0;
+
+        uint256 price = _getPrice(token);
+        uint8 decimals = tokenDecimals[token];
+
+        // Fórmula: (amount * price) / (10^decimals) / (10^PRICE_FEED_DECIMALS) * (10^ACCOUNTING_DECIMALS)
+        // Simplificado: (amount * price * 10^ACCOUNTING_DECIMALS) / (10^decimals * 10^PRICE_FEED_DECIMALS)
+        
+        uint256 numerator = amount * price * (10 ** ACCOUNTING_DECIMALS);
+        uint256 denominator = (10 ** decimals) * (10 ** PRICE_FEED_DECIMALS);
+        
+        return numerator / denominator;
+    }
+
+    /**
+     * @notice Convierte USD a cantidad de token
+     * @param token Dirección del token
+     * @param amountUsd Monto en USD con ACCOUNTING_DECIMALS
+     * @return Cantidad en decimales nativos del token
+     */
+    function _convertFromUsd(
+        address token,
+        uint256 amountUsd
+    ) internal view returns (uint256) {
+        if (amountUsd == 0) return 0;
+
+        uint256 price = _getPrice(token);
+        uint8 decimals = tokenDecimals[token];
+
+        // Fórmula: (amountUsd * 10^decimals * 10^PRICE_FEED_DECIMALS) / (price * 10^ACCOUNTING_DECIMALS)
+        
+        uint256 numerator = amountUsd * (10 ** decimals) * (10 ** PRICE_FEED_DECIMALS);
+        uint256 denominator = price * (10 ** ACCOUNTING_DECIMALS);
+        
+        return numerator / denominator;
+    }
+
+ /**
+     * @notice Envía ETH nativo de forma segura
+     * @param to Destinatario
+     * @param amount Cantidad en wei
+     */
+    function _sendNative(address to, uint256 amount) internal {
         (bool success, ) = to.call{value: amount}("");
         if (!success) revert TransferFailed();
+    }
+
+    /**
+     * @dev Solución: override explícito por si AccessControl y otros generan ambigüedad
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
