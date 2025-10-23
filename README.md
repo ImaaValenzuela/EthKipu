@@ -1,312 +1,477 @@
-# 🏦 KipuBank - Sistema de Bóveda Bancaria Descentralizada
+# 🏦 KipuBank V2 - Sistema Bancario Descentralizado Multi-Token
 
 ![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue)
-![License](https://img.shields.io/badge/License-GNU-000000?logo=gnu&logoColor=white)
+![OpenZeppelin](https://img.shields.io/badge/OpenZeppelin-5.0-purple)
+![Chainlink](https://img.shields.io/badge/Chainlink-Oracles-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 ![Network](https://img.shields.io/badge/Network-Sepolia-orange)
-![Security](https://img.shields.io/badge/Security-Audited-success)
+
+## 🚀 Evolución del Proyecto
+
+KipuBank V2 es la evolución completa del contrato original, transformándolo en un sistema bancario descentralizado de nivel producción con soporte multi-token, oráculos de precios y contabilidad avanzada.
+
+### 🆚 V1 vs V2
+
+| Característica | V1 | V2 |
+|---------------|----|----|
+| **Tokens soportados** | Solo ETH | ETH + ERC20 múltiples |
+| **Control de acceso** | Owner simple | Roles (Admin, Operator) |
+| **Límites** | En ETH | En USD (oracle Chainlink) |
+| **Contabilidad** | Simple | Multi-token normalizada |
+| **Seguridad** | Manual | OpenZeppelin (Pausable, ReentrancyGuard) |
+| **Oráculos** | ❌ | ✅ Chainlink Price Feeds |
+| **Decimales** | Fijos | Conversión automática |
 
 ## 📋 Descripción
 
-KipuBank es un contrato inteligente que implementa un sistema de bóveda bancaria descentralizada en Ethereum. Permite a los usuarios depositar y retirar ETH de forma segura, con límites controlados, sistema de pausa de emergencia y siguiendo las mejores prácticas de seguridad auditadas por Etherscan.
+KipuBank V2 es un sistema avanzado de bóvedas descentralizadas que permite:
 
-### ✨ Características Principales
+- ✅ **Depósitos multi-token**: ETH nativo y múltiples tokens ERC20
+- ✅ **Oráculos de Chainlink**: Conversión en tiempo real a USD
+- ✅ **Contabilidad normalizada**: Todos los montos se contabilizan en USD (6 decimales)
+- ✅ **Control de acceso por roles**: Administradores y operadores
+- ✅ **Límites dinámicos**: Bank cap y límites de retiro en USD
+- ✅ **Pausabilidad**: Sistema de emergencia con roles
+- ✅ **Conversión de decimales**: Manejo automático de diferentes estándares
+- ✅ **Seguridad robusta**: OpenZeppelin + patrones avanzados
 
-- ✅ **Depósitos seguros**: Los usuarios pueden depositar ETH con un mínimo de 0.001 ETH
-- ✅ **Retiros controlados**: Límite configurable por transacción para mayor seguridad
-- ✅ **Retiro total**: Función `withdrawAll()` para retirar todo el balance sin cálculos manuales
-- ✅ **Límite global**: Capacidad máxima del banco definida en el despliegue
-- ✅ **Circuit Breaker**: Sistema de pausa de emergencia para proteger fondos
-- ✅ **Control de acceso**: Solo el owner puede ejecutar funciones administrativas
-- ✅ **Eventos transparentes**: Registro completo de todas las operaciones en la blockchain
-- ✅ **Errores personalizados**: Mensajes claros y eficientes en gas
-- ✅ **Protección contra reentrancy**: Implementa el patrón checks-effects-interactions
+## 🏗️ Arquitectura
+
+### Diagrama de Componentes
+
+```
+┌─────────────────────────────────────────────────┐
+│           KipuBank V2 Contract                  │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  ┌──────────────┐      ┌──────────────┐       │
+│  │ AccessControl│      │  Pausable    │       │
+│  │ (Roles)      │      │  (Emergency) │       │
+│  └──────────────┘      └──────────────┘       │
+│                                                 │
+│  ┌──────────────┐      ┌──────────────┐       │
+│  │ ReentrancyG  │      │  SafeERC20   │       │
+│  │ (Security)   │      │  (Transfers) │       │
+│  └──────────────┘      └──────────────┘       │
+│                                                 │
+│  ┌─────────────────────────────────────┐      │
+│  │   Chainlink Price Feeds             │      │
+│  │   ETH/USD, Token/USD                │      │
+│  └─────────────────────────────────────┘      │
+│                                                 │
+│  ┌─────────────────────────────────────┐      │
+│  │   Multi-Token Vault System          │      │
+│  │   address(0) = ETH                  │      │
+│  │   Normalized to 6 decimals (USD)    │      │
+│  └─────────────────────────────────────┘      │
+└─────────────────────────────────────────────────┘
+```
+
+### Roles y Permisos
+
+```
+DEFAULT_ADMIN_ROLE (Super Admin)
+├── Puede otorgar/revocar todos los roles
+└── Gestión completa del sistema
+
+ADMIN_ROLE
+├── Agregar nuevos tokens ERC20
+├── Remover tokens del sistema
+└── Configuración de price feeds
+
+OPERATOR_ROLE
+├── Pausar contrato en emergencias
+└── Despausar el contrato
+```
+
+### Flujo de Depósito
+
+```
+Usuario                  Contrato              Chainlink
+  │                         │                      │
+  │──deposit ETH/Token─────>│                      │
+  │                         │──get price──────────>│
+  │                         │<─ETH/USD price───────│
+  │                         │                      │
+  │                         │ Convert to USD       │
+  │                         │ (normalize decimals) │
+  │                         │                      │
+  │                         │ Check bank cap       │
+  │                         │ Update vaults        │
+  │<──emit Deposit event────│                      │
+```
+
+### Contabilidad Multi-Token
+
+**Concepto Clave**: Todos los montos se normalizan a **6 decimales** (estándar USDC) para contabilidad interna.
+
+```solidity
+// Ejemplo: Usuario deposita 1 ETH cuando ETH = $2,000
+// 1. ETH tiene 18 decimales
+// 2. Price feed devuelve: 200000000000 (8 decimals) = $2,000
+// 3. Conversión a USD normalizado (6 decimals):
+//    (1 * 10^18 * 200000000000 * 10^6) / (10^18 * 10^8) = 2000000000
+//    = $2,000.00 (con 6 decimales)
+
+// Usuario puede retirar en cualquier token soportado
+// El sistema convierte USD → cantidad del token automáticamente
+```
 
 ## 🔒 Seguridad
 
-Este contrato implementa las mejores prácticas de seguridad recomendadas por Etherscan:
+### Protecciones Implementadas
 
-### Patrones Implementados
+| Protección | Implementación |
+|------------|----------------|
+| **Reentrancy** | OpenZeppelin ReentrancyGuard |
+| **Access Control** | OpenZeppelin AccessControl (3 roles) |
+| **Pausabilidad** | OpenZeppelin Pausable |
+| **Safe Transfers** | OpenZeppelin SafeERC20 |
+| **Oracle Validation** | Verificación de precios stale/inválidos |
+| **Checks-Effects-Interactions** | Patrón aplicado consistentemente |
 
-| Patrón | Descripción |
-|--------|-------------|
-| **Checks-Effects-Interactions** | Validaciones → Actualización de estado → Interacciones externas |
-| **Reentrancy Protection** | Estado se actualiza antes de transferencias |
-| **Circuit Breaker** | Sistema de pausa para emergencias |
-| **Access Control** | Funciones administrativas restringidas al owner |
-| **Custom Errors** | Errores personalizados para ahorrar gas |
-| **Safe Transfers** | Uso de `call` en lugar de `transfer` |
-
-## 🏗️ Arquitectura del Contrato
-
-### Variables Inmutables y Constantes
+### Validaciones de Oracle
 
 ```solidity
-uint256 public immutable WITHDRAWAL_LIMIT;  // Límite de retiro por transacción
-uint256 public constant MINIMUM_DEPOSIT = 0.001 ether;  // Depósito mínimo
-address public immutable owner;  // Propietario del contrato
+// El contrato valida:
+✅ Precio > 0
+✅ Timestamp de actualización existe
+✅ Precio no más viejo de 3600 segundos (1 hora)
+❌ Revierte con StalePrice si falla alguna validación
 ```
 
-### Variables de Estado
+## 📦 Dependencias
 
-```solidity
-uint256 public bankCap;           // Capacidad total del banco
-uint256 public totalDeposits;     // Fondos totales depositados
-uint256 public depositCount;      // Contador de depósitos
-uint256 public withdrawalCount;   // Contador de retiros
-bool public paused;               // Estado de pausa del contrato
-mapping(address => uint256) public vaults;  // Balances por usuario
+```json
+{
+  "@openzeppelin/contracts": "^5.0.0",
+  "@chainlink/contracts": "^1.0.0"
+}
 ```
 
-### Funciones Principales
+## 🔧 Uso del Contrato
 
-#### 📥 `deposit()` - External Payable
-Deposita ETH en tu bóveda personal.
+### 1. Depositar ETH
 
-**Requisitos:**
-- Contrato no pausado
-- Monto > 0
-- Monto ≥ 0.001 ETH
-- No exceder el límite del banco
+**Via Etherscan:**
 
-#### 📤 `withdraw(uint256 amount)` - External
-Retira una cantidad específica de ETH.
+1. Ir a "Write Contract" → Conectar wallet
+2. Buscar función `depositNative`
+3. Ingresar monto en ETH (ej: `0.1`)
+4. Click "Write"
 
-**Requisitos:**
-- Contrato no pausado
-- Monto > 0
-- Balance suficiente
-- Monto ≤ WITHDRAWAL_LIMIT
+**Ejemplo con cast:**
 
-#### 💰 `withdrawAll()` - External
-Retira todo tu balance disponible (hasta el límite).
-
-**Ventajas:**
-- No necesitas calcular el monto exacto
-- Previene errores de cálculo
-- Respeta el límite de retiro automáticamente
-
-#### ⏸️ `pause()` - External (Solo Owner)
-Pausa el contrato en caso de emergencia.
-
-#### ▶️ `unpause()` - External (Solo Owner)
-Reactiva el contrato después de una pausa.
-
-### Funciones de Consulta (View)
-
-| Función | Descripción | Retorno |
-|---------|-------------|---------|
-| `getBalance(address)` | Balance de cualquier usuario | `uint256` |
-| `getMyBalance()` | Tu propio balance | `uint256` |
-| `getBankStats()` | Estadísticas del banco | `(uint256, uint256, uint256, uint256)` |
-| `isPaused()` | Estado de pausa | `bool` |
-| `getMaxWithdrawal(address)` | Máximo retiro disponible | `uint256` |
-
-## 🔧 Cómo Interactuar (Etherscan)
-
-### 1. Ir al Contrato en Etherscan
-
-```
-https://sepolia.etherscan.io/address/0x212f9b323de6ddc866106b025c64d916aa7e8e26
+```bash
+cast send CONTRATO_ADDRESS "depositNative()" \
+  --value 0.1ether \
+  --rpc-url $SEPOLIA_RPC_URL \
+  --private-key $PRIVATE_KEY
 ```
 
-### 2. Conectar tu Wallet
+### 2. Agregar Token ERC20 (Solo Admin)
 
-- Click en "Contract" → "Write Contract"
-- Click en "Connect to Web3"
-- Conectar MetaMask
+**Tokens de prueba en Sepolia:**
 
-### 3. Funciones Disponibles
+| Token | Dirección | Price Feed |
+|-------|-----------|------------|
+| LINK | `0x779877A7B0D9E8603169DdbD7836e478b4624789` | `0xc59E3633BAAC79493d908e63626716e204A45EdF` |
+| USDC | `0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8` | - |
 
-#### 💵 Depositar ETH
-
-1. Buscar función `deposit`
-2. En el campo "deposit (payable)" ingresar el monto en ETH (ej: `0.05`)
-3. Click en "Write"
-4. Confirmar en MetaMask
-
-#### 💸 Retirar ETH (Monto Específico)
-
-1. Buscar función `withdraw`
-2. En el campo `amount (uint256)` ingresar el monto en **wei**
-   - Para convertir: `0.05 ETH = 50000000000000000 wei`
-   - Usar [ETH Unit Converter](https://eth-converter.com/)
-3. Click en "Write"
-4. Confirmar en MetaMask
-
-#### 💰 Retirar Todo el Balance
-
-1. Buscar función `withdrawAll`
-2. Click en "Write" (no requiere parámetros)
-3. Confirmar en MetaMask
-4. **Nota**: Si tu balance es mayor al límite (0.1 ETH), solo retirará 0.1 ETH
-
-#### ⏸️ Pausar Contrato (Solo Owner)
-
-1. Buscar función `pause`
-2. Click en "Write"
-3. Confirmar en MetaMask
-
-#### ▶️ Despausar Contrato (Solo Owner)
-
-1. Buscar función `unpause`
-2. Click en "Write"
-3. Confirmar en MetaMask
-
-### 4. Consultar Información (Read Contract)
-
-- Click en "Contract" → "Read Contract"
-- **No requiere conectar wallet**
-
-#### Ver tu Balance
-
-1. Buscar función `getMyBalance` o `getBalance`
-2. Si usas `getBalance`, pegar tu dirección
-3. El resultado se muestra en **wei**
-
-#### Ver Estadísticas del Banco
-
-1. Buscar función `getBankStats`
-2. Ver los 4 valores retornados:
-   - `_totalDeposits`: Total en el banco (wei)
-   - `_depositCount`: Número de depósitos
-   - `_withdrawalCount`: Número de retiros
-   - `_availableCapacity`: Capacidad restante (wei)
-
-#### Verificar Estado de Pausa
-
-1. Buscar función `isPaused`
-2. `true` = pausado, `false` = activo
-
-#### Calcular Máximo Retiro
-
-1. Buscar función `getMaxWithdrawal`
-2. Ingresar la dirección a consultar
-3. Ver el monto máximo que puede retirar en **wei**
-
-## 📊 Conversión de Unidades
-
-| ETH | Wei | Uso |
-|-----|-----|-----|
-| 0.001 ETH | 1000000000000000 | Depósito mínimo |
-| 0.01 ETH | 10000000000000000 | Depósito pequeño |
-| 0.1 ETH | 100000000000000000 | Límite de retiro |
-| 1 ETH | 1000000000000000000 | Depósito grande |
-
-**Herramienta recomendada**: [ETH Converter](https://eth-converter.com/)
-
-## 🎯 Ejemplos Prácticos
-
-### Escenario 1: Depósito Inicial
-
-```
-1. Ir a Write Contract → deposit
-2. Ingresar: 0.5 (ETH)
-3. Write → Confirmar MetaMask
-4. Verificar en Read Contract → getMyBalance
-   Resultado: 500000000000000000 (0.5 ETH en wei)
+```javascript
+// Etherscan Write Contract
+addToken(
+  "0x779877A7B0D9E8603169DdbD7836e478b4624789", // LINK token
+  "0xc59E3633BAAC79493d908e63626716e204A45EdF"  // LINK/USD feed
+)
 ```
 
-### Escenario 2: Retiro Parcial
+### 3. Depositar Token ERC20
 
-```
-1. Ir a Write Contract → withdraw
-2. Ingresar: 50000000000000000 (0.05 ETH en wei)
-3. Write → Confirmar MetaMask
-4. Verificar nuevo balance: 450000000000000000 (0.45 ETH)
-```
+**Paso 1: Aprobar**
 
-### Escenario 3: Retiro Total
-
-```
-1. Tener balance: 0.3 ETH
-2. Ir a Write Contract → withdrawAll
-3. Write → Confirmar MetaMask
-4. Resultado: Retira 0.1 ETH (límite)
-5. Balance restante: 0.2 ETH
-6. Llamar withdrawAll nuevamente para retirar otros 0.1 ETH
+```javascript
+// En el contrato del token ERC20 → approve
+approve(
+  KIPUBANK_ADDRESS,
+  "1000000000000000000" // 1 token (18 decimales)
+)
 ```
 
-### Escenario 4: Emergencia (Owner)
+**Paso 2: Depositar**
 
-```
-1. Detectar actividad sospechosa
-2. Ir a Write Contract → pause
-3. Write → Confirmar MetaMask
-4. Verificar: isPaused → true
-5. Los usuarios NO pueden depositar ni retirar
-6. Investigar el problema
-7. Si todo está bien: unpause
+```javascript
+// En KipuBankV2 → deposit
+deposit(
+  "0x779877A7B0D9E8603169DdbD7836e478b4624789", // token address
+  "1000000000000000000" // amount
+)
 ```
 
-## 📈 Estadísticas y Monitoreo
+### 4. Consultar Balances
 
-### Ver Eventos en Etherscan
+**Balance de un token específico:**
 
-1. Ir a "Contract" → "Events"
-2. Ver historial de:
-   - `Deposit`: Todos los depósitos
-   - `Withdrawal`: Todos los retiros
-   - `Paused`: Cuándo se pausó
-   - `Unpaused`: Cuándo se reactivó
-
-### Filtrar por Dirección
-
-```
-1. En "Events" usar el filtro
-2. Buscar eventos específicos de tu dirección
-3. Ver historial completo de transacciones
+```javascript
+// Read Contract
+getBalance(
+  "YOUR_ADDRESS",
+  "0x0000000000000000000000000000000000000000" // address(0) para ETH
+)
 ```
 
-## 🛡️ Errores Comunes y Soluciones
+**Balance en USD:**
+
+```javascript
+getBalanceInUsd(
+  "YOUR_ADDRESS",
+  "0x0000000000000000000000000000000000000000"
+)
+// Retorna: balance en USD con 6 decimales
+```
+
+**Todos los balances:**
+
+```javascript
+getAllBalances("YOUR_ADDRESS")
+// Retorna 3 arrays: tokens, balances, balancesUsd
+```
+
+### 5. Retirar Fondos
+
+**Retiro específico:**
+
+```javascript
+withdraw(
+  "0x0000000000000000000000000000000000000000", // ETH
+  "100000000000000000" // 0.1 ETH
+)
+```
+
+**Retiro total (hasta límite):**
+
+```javascript
+withdrawAll(
+  "0x0000000000000000000000000000000000000000" // ETH
+)
+```
+
+### 6. Gestión de Roles
+
+**Otorgar rol de Operator:**
+
+```javascript
+// Solo DEFAULT_ADMIN_ROLE puede ejecutar
+grantRole(
+  "0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929", // OPERATOR_ROLE
+  "0x..." // nueva dirección
+)
+```
+
+**Verificar rol:**
+
+```javascript
+hasRole(
+  "0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929",
+  "0x..." // dirección a verificar
+)
+```
+
+### 7. Pausar en Emergencia (Solo Operator)
+
+```javascript
+pause() // Pausa todas las operaciones
+
+// Después de resolver el problema
+unpause() // Reactiva el contrato
+```
+
+## 📊 Funciones de Vista Importantes
+
+### Estadísticas del Banco
+
+```javascript
+getBankStats()
+// Retorna:
+// - totalDepositsUsd: Total en USD
+// - depositCount: Número de depósitos
+// - withdrawalCount: Número de retiros
+// - availableCapacityUsd: Capacidad restante
+```
+
+### Tokens Soportados
+
+```javascript
+getSupportedTokens()
+// Retorna array de direcciones
+// [address(0), 0x779..., 0x94a...]
+
+getTokenInfo("0x779877A7B0D9E8603169DdbD7836e478b4624789")
+// Retorna: {
+//   tokenAddress,
+//   decimals,
+//   isSupported,
+//   priceFeed
+// }
+```
+
+### Precios y Conversiones
+
+```javascript
+// Precio actual del token
+getTokenPrice("0x0000000000000000000000000000000000000000")
+// Retorna precio de ETH en USD (8 decimales)
+
+// Convertir token a USD
+convertToUsd(
+  "0x0000000000000000000000000000000000000000",
+  "1000000000000000000" // 1 ETH
+)
+// Retorna valor en USD (6 decimales)
+
+// Convertir USD a token
+convertFromUsd(
+  "0x0000000000000000000000000000000000000000",
+  "2000000000" // $2000 USD
+)
+// Retorna cantidad de ETH
+```
+
+### Máximo Retiro
+
+```javascript
+getMaxWithdrawal(
+  "YOUR_ADDRESS",
+  "0x0000000000000000000000000000000000000000"
+)
+// Retorna: mínimo entre balance y withdrawalLimitUsd
+```
+
+
+## 📈 Conversión de Decimales
+
+### Tabla de Referencia
+
+| Token | Decimales Nativos | Ejemplo | USD (6 dec) |
+|-------|-------------------|---------|-------------|
+| ETH | 18 | 1 ETH = 1e18 wei | $2,000 = 2000000000 |
+| LINK | 18 | 1 LINK = 1e18 | $15 = 15000000 |
+| USDC | 6 | 1 USDC = 1e6 | $1 = 1000000 |
+
+### Fórmulas de Conversión
+
+**Token → USD:**
+```
+USD = (amount * price * 10^6) / (10^tokenDecimals * 10^8)
+
+Donde:
+- amount: cantidad en decimales nativos del token
+- price: precio del token en USD con 8 decimales (Chainlink)
+- 10^6: decimales de contabilidad (ACCOUNTING_DECIMALS)
+- 10^tokenDecimals: decimales del token
+- 10^8: decimales del price feed
+```
+
+**USD → Token:**
+```
+amount = (amountUSD * 10^tokenDecimals * 10^8) / (price * 10^6)
+```
+
+## 🔗 Chainlink Price Feeds en Sepolia
+
+| Par | Dirección | Decimales |
+|-----|-----------|-----------|
+| ETH/USD | `0x694AA1769357215DE4FAC081bf1f309aDC325306` | 8 |
+| LINK/USD | `0xc59E3633BAAC79493d908e63626716e204A45EdF` | 8 |
+
+Más feeds: [Chainlink Sepolia Feeds](https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1#sepolia-testnet)
+
+## ⚠️ Errores Comunes
 
 | Error | Causa | Solución |
 |-------|-------|----------|
-| `DepositTooSmall()` | Depósito < 0.001 ETH | Depositar mínimo 0.001 ETH |
-| `BankCapExceeded()` | Banco lleno | Esperar a que haya retiros |
-| `InsufficientBalance()` | No tienes fondos suficientes | Verificar balance con `getMyBalance` |
-| `WithdrawalLimitExceeded()` | Intentas retirar > 0.1 ETH | Retirar máximo 0.1 ETH o usar `withdrawAll` |
-| `ContractPaused()` | Contrato pausado | Esperar a que el owner lo reactive |
-| `OnlyOwner()` | No eres el owner | Solo el owner puede pausar/despausar |
-| `TransferFailed()` | Fallo en transferencia | Verificar dirección y gas |
+| `TokenNotSupported()` | Token no agregado al sistema | Admin debe agregar con `addToken()` |
+| `DepositTooSmall()` | Depósito < $0.10 USD | Depositar mínimo $0.10 |
+| `BankCapExceeded()` | Banco alcanzó límite en USD | Esperar retiros |
+| `WithdrawalLimitExceeded()` | Retiro > $1,000 USD | Retirar en múltiples transacciones |
+| `StalePrice()` | Precio oracle desactualizado | Esperar actualización de Chainlink |
+| `InvalidPrice()` | Precio ≤ 0 | Problema con oracle, contactar admin |
+| `AccessControlUnauthorizedAccount` | No tienes el rol requerido | Solo admin/operator |
 
-## 📁 Estructura del Repositorio
+## 🎯 Casos de Uso
 
+### Caso 1: Usuario Deposita y Retira ETH
+
+```javascript
+// 1. Depositar 0.5 ETH
+depositNative{value: 0.5 ether}()
+
+// 2. Ver balance
+getBalance(myAddress, address(0))
+// → 500000000000000000 (0.5 ETH)
+
+// 3. Ver valor en USD
+getBalanceInUsd(myAddress, address(0))
+// → 1000000000 ($1,000 si ETH = $2,000)
+
+// 4. Retirar 0.2 ETH
+withdraw(address(0), 200000000000000000)
+
+// 5. Balance final
+getBalance(myAddress, address(0))
+// → 300000000000000000 (0.3 ETH)
 ```
-kipu-bank/
-├── contracts/
-│   └── KipuBank.sol          # Contrato principal
-├── .env.example              # Variables de entorno de ejemplo
-├── .gitignore               # Archivos a ignorar
-├── README.md                # Este archivo
-└── LICENSE                  # Licencia MIT
+
+### Caso 2: Admin Agrega Nuevo Token
+
+```javascript
+// 1. Verificar rol de admin
+hasRole(ADMIN_ROLE, myAddress)
+// → true
+
+// 2. Agregar LINK
+addToken(
+  "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+  "0xc59E3633BAAC79493d908e63626716e204A45EdF"
+)
+
+// 3. Verificar que se agregó
+getSupportedTokens()
+// → [address(0), 0x779...]
+
+// 4. Ver info del token
+getTokenInfo("0x779877A7B0D9E8603169DdbD7836e478b4624789")
 ```
 
-## 📝 Información del Contrato Desplegado
+### Caso 3: Usuario con Múltiples Tokens
+
+```javascript
+// 1. Depositar ETH
+depositNative{value: 1 ether}()
+
+// 2. Aprobar y depositar LINK
+// En contrato LINK: approve(bankAddress, 100e18)
+deposit("0x779...", 100e18)
+
+// 3. Ver todos los balances
+getAllBalances(myAddress)
+// Retorna:
+// tokens: [address(0), 0x779...]
+// balances: [1e18, 100e18]
+// balancesUsd: [2000000000, 1500000000] // $2k ETH, $1.5k LINK
+
+// 4. Retirar en el token que prefieras
+withdrawAll(address(0)) // Retira ETH hasta límite
+```
+
+## 📝 Información del Despliegue
 
 - **Red**: Sepolia Testnet
-- **Dirección**: `[0x212f9b323de6ddc866106b025c64d916aa7e8e26]`
-- **Explorador**: [Ver en Etherscan](https://sepolia.etherscan.io/address/0x212f9b323de6ddc866106b025c64d916aa7e8e26)
-- **Owner**: `[0xd7923b9c6484Cf3113570CdC8A8e3f355747B96b]`
-- **Bank Cap**: 100 ETH
-- **Withdrawal Limit**: 0.1 ETH por transacción
-- **Minimum Deposit**: 0.001 ETH
-
-## 🧪 Testing
-
-El contrato ha sido verificado por la IA de Etherscan y cumple con:
-
-- ✅ Uso correcto de SPDX-License-Identifier
-- ✅ Variables inmutables y constantes apropiadas
-- ✅ Eventos para transparencia
-- ✅ Errores personalizados eficientes
-- ✅ Modificadores para reducir duplicación
-- ✅ Control de acceso implementado
-- ✅ Documentación completa con NatSpec
-- ✅ Funciones privadas con visibilidad restringida
-- ✅ Función withdrawAll para prevenir errores
-- ✅ Validación de inputs robusta
-- ✅ Circuit breaker para emergencias
-- ✅ Protección contra reentrancy
+- **Dirección**: `[0xcca76137A214A3A2416d4c45DF87743fB158B52F]`
+- **Explorador**: [Ver en Etherscan](https://sepolia.etherscan.io/address/0xcca76137a214a3a2416d4c45df87743fb158b52f)
+- **Bank Cap**: $100,000 USD
+- **Withdrawal Limit**: $1,000 USD
+- **Oracle ETH/USD**: `0x694AA1769357215DE4FAC081bf1f309aDC325306`
 
 ## 👤 Autor
 
@@ -314,41 +479,26 @@ El contrato ha sido verificado por la IA de Etherscan y cumple con:
 - GitHub: [@ImaaValenzuela](https://github.com/ImaaValenzuela)
 - LinkedIn: [Imanol Valenzuela](https://www.linkedin.com/in/imanol-valenzuela-eguez/)
 
-## 🤝 Contribuciones
-
-Este es un proyecto académico del programa Kipu Web3. Las contribuciones son bienvenidas:
-
-1. Fork el proyecto
-2. Crea una rama (`git checkout -b feature/mejora`)
-3. Commit tus cambios (`git commit -m 'Agrega nueva característica'`)
-4. Push a la rama (`git push origin feature/mejora`)
-5. Abre un Pull Request
-
 ## 📄 Licencia
 
-Este proyecto está bajo la Licencia GPL.
-
-```
-GNU License
-
-Copyright (c) 2025 [ImaaValenzuela]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software")...
-```
+Este proyecto está bajo la Licencia MIT.
 
 ## 🙏 Agradecimientos
 
-- **Programa Kipu Web3** - Por la formación en desarrollo blockchain
-- **Comunidad Ethereum** - Por las herramientas y documentación
-- **OpenZeppelin** - Por los estándares de seguridad
-- **Etherscan** - Por la auditoría y recomendaciones de seguridad
+- **Programa Kipu Web3** - Formación integral en blockchain
+- **OpenZeppelin** - Contratos seguros y auditados
+- **Chainlink** - Oráculos descentralizados confiables
+- **Comunidad Ethereum** - Soporte y recursos
 
 ## ⚠️ Disclaimer
 
-Este contrato fue desarrollado con fines educativos como parte del programa Kipu Web3. Aunque implementa las mejores prácticas de seguridad recomendadas por Etherscan, **NO** ha sido auditado profesionalmente. 
+Este contrato fue desarrollado con fines educativos. Aunque implementa las mejores prácticas y utiliza librerías auditadas (OpenZeppelin, Chainlink), **NO** ha sido auditado profesionalmente.
 
-**NO** usar en producción con fondos reales sin una auditoría profesional completa.
+**NO** usar en producción con fondos reales sin:
+1. Auditoría de seguridad profesional completa
+2. Pruebas exhaustivas en testnet
+3. Bug bounty program
+4. Seguro de protocolo
 
 ---
 
