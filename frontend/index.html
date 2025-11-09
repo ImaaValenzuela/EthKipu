@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KipuBank V3 - DeFi Banking</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">🏦 KipuBank V3</div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span class="network-badge" id="networkBadge">Not Connected</span>
+                <button id="connectBtn">Connect Wallet</button>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- Panel de Balance -->
+            <div class="card">
+                <h2>💰 Your Balance</h2>
+                <div class="balance-highlight" id="userBalance">0.00 USDC</div>
+                <div class="info-box">
+                    <p><strong>Address:</strong> <span id="userAddress">Not connected</span></p>
+                    <p><strong>Max Withdrawal:</strong> <span id="maxWithdrawal">0.00 USDC</span></p>
+                </div>
+            </div>
+
+            <!-- Panel de Estadísticas -->
+            <div class="card">
+                <h2>📊 Bank Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Total Deposits</div>
+                        <div class="stat-value" id="totalDeposits">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bank Capacity</div>
+                        <div class="stat-value" id="bankCapacity">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Deposit Count</div>
+                        <div class="stat-value" id="depositCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Withdrawal Count</div>
+                        <div class="stat-value" id="withdrawalCount">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Panel de Depósito -->
+            <div class="card">
+                <h2>📥 Deposit</h2>
+                <div class="form-group">
+                    <label>Select Token</label>
+                    <select id="depositToken">
+                        <option value="native">ETH (Native)</option>
+                        <option value="0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238">USDC</option>
+                        <option value="0x779877A7B0D9E8603169DdbD7836e478b4624789">LINK</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" id="depositAmount" placeholder="0.0" step="0.01">
+                </div>
+                <div class="estimate-box" id="depositEstimate">
+                    <strong>Estimated USDC:</strong> <span id="depositEstimateValue">0.00</span>
+                </div>
+                <button id="estimateDepositBtn">Estimate</button>
+                <button id="depositBtn">Deposit</button>
+                <div class="loading" id="depositLoading">
+                    <div class="spinner"></div>
+                    <p>Processing transaction...</p>
+                </div>
+                <div class="success-message" id="depositSuccess"></div>
+                <div class="error-message" id="depositError"></div>
+            </div>
+
+            <!-- Panel de Retiro -->
+            <div class="card">
+                <h2>📤 Withdraw</h2>
+                <div class="form-group">
+                    <label>Amount (USDC)</label>
+                    <input type="number" id="withdrawAmount" placeholder="0.0" step="0.01">
+                </div>
+                <div class="info-box">
+                    <p>💡 Maximum withdrawal per transaction: 10,000 USDC</p>
+                    <p>💡 You will receive USDC (6 decimals)</p>
+                </div>
+                <button id="withdrawBtn">Withdraw</button>
+                <button id="withdrawAllBtn">Withdraw All</button>
+                <div class="loading" id="withdrawLoading">
+                    <div class="spinner"></div>
+                    <p>Processing transaction...</p>
+                </div>
+                <div class="success-message" id="withdrawSuccess"></div>
+                <div class="error-message" id="withdrawError"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script/index.js">
+    </script>
+</body>
+</html>

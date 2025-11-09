@@ -1,0 +1,54 @@
+# ==========================
+# Foundry / Solidity
+# ==========================
+/out/
+/cache/
+/broadcast/
+*.s.sol.json
+*.address.json
+
+# Forge test cache
+**/.forge-cache
+
+# Remappings
+remappings.txt
+
+# Bytecode artifacts
+*.abi
+*.bin
+
+# ==========================
+# Node / Frontend
+# ==========================
+/node_modules/
+/dist/
+/build/
+
+# NPM logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dotenv & secrets
+.env
+.env.*
+!.env.example   # keep example env
+
+# ==========================
+# OS / Editor Junk
+# ==========================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ==========================
+# Linux temporary files
+# ==========================
+*~
